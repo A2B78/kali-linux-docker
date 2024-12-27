@@ -1,0 +1,77 @@
+name: Build and Test Kali Docker
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    # Étape 1 : Vérification du dépôt
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    # Étape 2 : Préparation du fichier `env`
+    - name: Prepare environment file
+      run: cp env_template env
+
+    # Étape 3 : Configuration de Docker
+    - name: Setup Docker
+      uses: docker/setup-buildx-action@v2
+
+    # Étape 4 : Construction de l'image Docker
+    - name: Build Docker image
+      run: |
+        docker build --build-arg DESKTOP_ENVIRONMENT=$XDESKTOP_ENVIRONMENT \
+                     --build-arg REMOTE_ACCESS=$XREMOTE_ACCESS \
+                     --build-arg KALI_PACKAGE=$XKALI_PKG \
+                     --build-arg SSH_PORT=$XSSH_PORT \
+                     --build-arg RDP_PORT=$XRDP_PORT \
+                     --build-arg VNC_PORT=$XVNC_PORT \
+                     --build-arg VNC_DISPLAY=$XVNC_DISPLAY \
+                     --build-arg UNAME=$USERNAME \
+                     --build-arg UPASS=$PASSWORD \
+                     -t $DOCKERIMG .
+
+      env:
+        XRDP_PORT: ${{ secrets.XRDP_PORT }}
+        XVNC_DISPLAY: ${{ secrets.XVNC_DISPLAY }}
+        XVNC_PORT: ${{ secrets.XVNC_PORT }}
+        XSSH_PORT: ${{ secrets.XSSH_PORT }}
+        XDESKTOP_ENVIRONMENT: ${{ secrets.XDESKTOP_ENVIRONMENT }}
+        XREMOTE_ACCESS: ${{ secrets.XREMOTE_ACCESS }}
+        XKALI_PKG: ${{ secrets.XKALI_PKG }}
+        USERNAME: ${{ secrets.USERNAME }}
+        PASSWORD: ${{ secrets.PASSWORD }}
+        DOCKERIMG: ${{ secrets.DOCKERIMG }}
+
+    # Étape 5 : Test du conteneur Docker
+    - name: Run and Test Docker container
+      run: |
+        docker run -d --name $CONTAINER \
+          -p $XSSH_PORT:22 \
+          -p $XRDP_PORT:3389 \
+          -p $XVNC_PORT:5900 \
+          -v $HOSTDIR:$CONTAINERDIR \
+          $DOCKERIMG
+        sleep 10
+        docker ps
+      env:
+        XSSH_PORT: ${{ secrets.XSSH_PORT }}
+        XRDP_PORT: ${{ secrets.XRDP_PORT }}
+        XVNC_PORT: ${{ secrets.XVNC_PORT }}
+        HOSTDIR: ${{ secrets.HOSTDIR }}
+        CONTAINERDIR: ${{ secrets.CONTAINERDIR }}
+        CONTAINER: ${{ secrets.CONTAINER }}
+        DOCKERIMG: ${{ secrets.DOCKERIMG }}
+
+    # Étape 6 : Nettoyage (optionnel)
+    - name: Cleanup Docker containers
+      if: always()
+      run: |
+        docker stop $CONTAINER
+        docker rm $CONTAINER
